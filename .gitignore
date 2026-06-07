@@ -5,3 +5,11 @@ __pycache__/
 venv/
 env/
 .streamlit/secrets.toml
+
+# Local/raw data and generated artifacts
+data/raw/
+data/*.csv
+models/*.pkl
+reports/metrics.json
+reports/figures/*.png
+reports/figures/shap/*.png
