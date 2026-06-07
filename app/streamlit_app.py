@@ -39,6 +39,18 @@ PITCH_STYLE = {
 }
 
 
+def clean_feature_name(name: str) -> str:
+    """Convert transformed sklearn feature names into readable labels."""
+    return (
+        name.replace("numeric__", "")
+        .replace("categorical__", "")
+        .replace("venue_", "venue: ")
+        .replace("city_", "city: ")
+        .replace("match_type_", "match type: ")
+        .replace("season_", "season: ")
+    )
+
+
 @st.cache_resource
 def load_artifacts() -> tuple:
     """Load trained model and preprocessing artifacts."""
@@ -141,11 +153,11 @@ def predict_page() -> None:
         st.plotly_chart(fig, use_container_width=True)
 
     importances = pd.Series(model.feature_importances_, index=preprocessor.get_feature_names_out())
-    st.subheader("Top model signals")
-    st.dataframe(
-        importances.sort_values(ascending=False).head(3).rename("Importance"),
-        use_container_width=True,
-    )
+    transformed_values = pd.Series(transformed[0], index=preprocessor.get_feature_names_out())
+    local_signal = (importances * transformed_values.abs()).sort_values(ascending=False).head(3)
+    local_signal.index = [clean_feature_name(name) for name in local_signal.index]
+    st.subheader("Top local model signals")
+    st.dataframe(local_signal.rename("Signal strength"), use_container_width=True)
 
 
 def performance_page() -> None:
