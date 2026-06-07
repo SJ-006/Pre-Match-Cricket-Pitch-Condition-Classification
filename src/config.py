@@ -28,19 +28,14 @@ PITCH_LABELS = {
 INDIAN_VENUES = [
     "Wankhede Stadium",
     "M. A. Chidambaram Stadium",
-    "MA Chidambaram Stadium",
     "Eden Gardens",
     "M. Chinnaswamy Stadium",
-    "M Chinnaswamy Stadium",
     "Narendra Modi Stadium",
-    "Sardar Patel Stadium",
     "Arun Jaitley Stadium",
-    "Feroz Shah Kotla",
     "Rajiv Gandhi International Stadium",
     "Maharashtra Cricket Association Stadium",
     "Sawai Mansingh Stadium",
     "Punjab Cricket Association IS Bindra Stadium",
-    "Punjab Cricket Association Stadium",
     "Green Park",
     "Holkar Cricket Stadium",
     "Barabati Stadium",
@@ -51,6 +46,15 @@ INDIAN_VENUES = [
     "Himachal Pradesh Cricket Association Stadium",
     "Bharat Ratna Shri Atal Bihari Vajpayee Ekana Cricket Stadium",
 ]
+
+VENUE_ALIASES = {
+    "MA Chidambaram Stadium": "M. A. Chidambaram Stadium",
+    "M Chinnaswamy Stadium": "M. Chinnaswamy Stadium",
+    "Sardar Patel Stadium": "Narendra Modi Stadium",
+    "Feroz Shah Kotla": "Arun Jaitley Stadium",
+    "Punjab Cricket Association Stadium": "Punjab Cricket Association IS Bindra Stadium",
+    "Rajiv Gandhi International Stadium, Uppal": "Rajiv Gandhi International Stadium",
+}
 
 SUBCONTINENTAL_CITIES = [
     "Mumbai",
@@ -76,7 +80,6 @@ SUBCONTINENTAL_CITIES = [
 COASTAL_VENUES = [
     "Wankhede Stadium",
     "M. A. Chidambaram Stadium",
-    "MA Chidambaram Stadium",
     "Brabourne Stadium",
     "Dr DY Patil Sports Academy",
 ]

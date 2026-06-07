@@ -28,14 +28,14 @@ from src.generate_data import VENUE_CITY  # noqa: E402
 
 st.set_page_config(
     page_title="Cricket Pitch Classifier",
-    page_icon="🏏",
+    page_icon="C",
     layout="wide",
 )
 
 PITCH_STYLE = {
-    0: ("🏏", "#16a34a"),
-    1: ("💨", "#2563eb"),
-    2: ("🌀", "#f97316"),
+    0: ("BAT", "#16a34a"),
+    1: ("PACE", "#2563eb"),
+    2: ("SPIN", "#f97316"),
 }
 
 
@@ -127,16 +127,36 @@ def predict_page() -> None:
     transformed = preprocessor.transform(engineered)
     probabilities = model.predict_proba(transformed)[0]
     prediction = int(probabilities.argmax())
-    emoji, color = PITCH_STYLE[prediction]
+    badge, color = PITCH_STYLE[prediction]
 
-    left, right = st.columns([0.9, 1.1])
+    left, right = st.columns([0.8, 1.2])
     with left:
         st.markdown(
             f"""
-            <div style="border-left: 8px solid {color}; padding: 1rem 1.2rem; background: #f8fafc;">
-                <div style="font-size: 3rem;">{emoji}</div>
-                <h2 style="margin: 0;">{PITCH_LABELS[prediction]}</h2>
-                <p style="margin: 0.35rem 0 0;">Confidence: {probabilities[prediction]:.1%}</p>
+            <div style="
+                border-left: 8px solid {color};
+                padding: 1rem 1.2rem;
+                background: #f8fafc;
+                border-radius: 6px;
+                min-height: 150px;
+                color: #111827;
+            ">
+                <div style="
+                    display: inline-block;
+                    padding: 0.25rem 0.55rem;
+                    border-radius: 999px;
+                    background: {color};
+                    color: white;
+                    font-weight: 700;
+                    letter-spacing: 0;
+                    margin-bottom: 0.75rem;
+                ">{badge}</div>
+                <h2 style="margin: 0; color: #111827; font-size: 1.65rem;">
+                    {PITCH_LABELS[prediction]}
+                </h2>
+                <p style="margin: 0.35rem 0 0; color: #374151;">
+                    Confidence: {probabilities[prediction]:.1%}
+                </p>
             </div>
             """,
             unsafe_allow_html=True,

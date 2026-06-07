@@ -15,7 +15,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.config import DATASET_PATH, INDIAN_VENUES, RANDOM_STATE, RAW_DATA_DIR
+from src.config import DATASET_PATH, INDIAN_VENUES, RANDOM_STATE, RAW_DATA_DIR, VENUE_ALIASES
 
 logger = logging.getLogger(__name__)
 
@@ -24,19 +24,14 @@ VENUE_CITY = {
     "Brabourne Stadium": ("Mumbai", "India"),
     "Dr DY Patil Sports Academy": ("Mumbai", "India"),
     "M. A. Chidambaram Stadium": ("Chennai", "India"),
-    "MA Chidambaram Stadium": ("Chennai", "India"),
     "Eden Gardens": ("Kolkata", "India"),
     "M. Chinnaswamy Stadium": ("Bengaluru", "India"),
-    "M Chinnaswamy Stadium": ("Bengaluru", "India"),
     "Narendra Modi Stadium": ("Ahmedabad", "India"),
-    "Sardar Patel Stadium": ("Ahmedabad", "India"),
     "Arun Jaitley Stadium": ("Delhi", "India"),
-    "Feroz Shah Kotla": ("Delhi", "India"),
     "Rajiv Gandhi International Stadium": ("Hyderabad", "India"),
     "Maharashtra Cricket Association Stadium": ("Pune", "India"),
     "Sawai Mansingh Stadium": ("Jaipur", "India"),
     "Punjab Cricket Association IS Bindra Stadium": ("Mohali", "India"),
-    "Punjab Cricket Association Stadium": ("Mohali", "India"),
     "Green Park": ("Kanpur", "India"),
     "Holkar Cricket Stadium": ("Indore", "India"),
     "Barabati Stadium": ("Cuttack", "India"),
@@ -68,6 +63,18 @@ def _stable_seed(text: str) -> int:
     """Create a deterministic integer seed from text."""
     digest = md5(text.encode("utf-8"), usedforsecurity=False).hexdigest()
     return int(digest[:8], 16)
+
+
+def canonicalize_venue(venue: str) -> str:
+    """Map historic or alternate venue names to a single canonical name."""
+    normalized = venue.strip()
+    for alias, canonical in VENUE_ALIASES.items():
+        if alias.lower() in normalized.lower():
+            return canonical
+    for known in INDIAN_VENUES:
+        if known.lower() in normalized.lower():
+            return known
+    return normalized
 
 
 def _iter_json_objects(raw_dir: Path) -> list[dict[str, Any]]:
@@ -103,8 +110,8 @@ def _iter_csv_texts(raw_dir: Path) -> list[str]:
 
 def _match_venue_is_indian(venue: str) -> bool:
     """Return whether a venue matches the configured Indian venue list."""
-    venue_lower = venue.lower()
-    return any(known.lower() in venue_lower for known in INDIAN_VENUES)
+    canonical = canonicalize_venue(venue)
+    return canonical in INDIAN_VENUES
 
 
 def _extract_match_row(match: dict[str, Any]) -> dict[str, Any] | None:
@@ -122,11 +129,8 @@ def _extract_match_row(match: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     city = str(info.get("city") or "").strip()
-    for known, (known_city, _) in VENUE_CITY.items():
-        if known.lower() in venue.lower():
-            city = city or known_city
-            venue = known
-            break
+    venue = canonicalize_venue(venue)
+    city = city or VENUE_CITY.get(venue, ("Mumbai", "India"))[0]
     city = city or "Mumbai"
 
     innings = match.get("innings", [])
@@ -205,11 +209,8 @@ def _extract_csv_match_row(csv_text: str) -> dict[str, Any] | None:
         return None
 
     city = info.get("city", "").strip()
-    for known, (known_city, _) in VENUE_CITY.items():
-        if known.lower() in venue.lower():
-            city = city or known_city
-            venue = known
-            break
+    venue = canonicalize_venue(venue)
+    city = city or VENUE_CITY.get(venue, ("Mumbai", "India"))[0]
     city = city or "Mumbai"
     match_type = _normalize_match_type(info.get("match_type"), info.get("event"))
     rng = random.Random(_stable_seed(venue + match_type + info.get("date", "")) + RANDOM_STATE)
