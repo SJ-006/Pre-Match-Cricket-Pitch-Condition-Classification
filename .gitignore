@@ -8,7 +8,6 @@ env/
 
 # Local/raw data and generated artifacts
 data/raw/
-data/*.csv
 models/*.pkl
 reports/metrics.json
 reports/figures/*.png
