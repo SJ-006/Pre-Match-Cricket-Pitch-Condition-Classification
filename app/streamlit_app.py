@@ -58,7 +58,8 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 html, body, .stApp { background:#020617 !important; font-family:'Inter',sans-serif !important; color:#f1f5f9 !important; }
-.block-container { padding:1.5rem 2rem 2rem !important; max-width:1400px !important; }
+.block-container { padding:5.5rem 2rem 2rem !important; max-width:1400px !important; }
+header[data-testid="stHeader"] { background-color: #020617 !important; }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
@@ -476,7 +477,7 @@ def _degrad_line() -> go.Figure:
 def _render_sidebar_nav() -> str:
     """Render the styled nav sidebar; return the active page key."""
     if "page" not in st.session_state:
-        st.session_state.page = "predict"
+        st.session_state.page = "about"
 
     # ── Brand header ──────────────────────────────────────────────────────────
     st.sidebar.markdown(
@@ -514,13 +515,13 @@ def _render_sidebar_nav() -> str:
                 st.session_state.page = key
                 st.rerun()
 
+    _nav_item("about",   "≡", "About")
     _nav_item("predict", "▦", "Predict & Tactics")
     _nav_item("venue",   "◫", "Venue DNA & Comparison")
     _nav_item("format",  "◎", "Multi-Format Analysis")
     _nav_item("perf",    "⊟", "Model Performance & SHAP")
     _nav_item("validation", "🧪", "Model Validation Lab")
     _nav_item("roadmap", "◉", "Future Roadmap")
-    _nav_item("about",   "≡", "About")
 
     return st.session_state.page
 
