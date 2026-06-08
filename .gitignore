@@ -12,3 +12,6 @@ models/*.pkl
 reports/metrics.json
 reports/figures/*.png
 reports/figures/shap/*.png
+
+# Ignore CSV datasets
+*.csv
