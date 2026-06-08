@@ -34,6 +34,21 @@ def add_derived_features(df: pd.DataFrame) -> pd.DataFrame:
     ).abs()
     engineered["high_dew"] = (engineered["dew_point"] > 18).astype(int)
     engineered["pitch_freshness"] = (engineered["pitch_age_days"] < 3).astype(int)
+    
+    # New physical features domain-specific relations
+    engineered["soil_spin_factor"] = (
+        (engineered["soil_composition"] == "Red Soil").astype(int)
+        if "soil_composition" in engineered.columns else 0
+    )
+    engineered["compaction_density"] = (
+        engineered["compaction_kpa"] / (engineered["pitch_age_days"] + 1)
+        if "compaction_kpa" in engineered.columns else 280.0 / (engineered["pitch_age_days"] + 1)
+    )
+    engineered["grass_friction_ratio"] = (
+        engineered["grass_coverage"] * engineered["humidity"]
+        if "grass_coverage" in engineered.columns else 4.5 * engineered["humidity"]
+    )
+    
     logger.info("Added derived features to %s rows.", len(engineered))
     return engineered
 

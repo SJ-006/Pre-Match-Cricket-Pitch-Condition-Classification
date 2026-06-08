@@ -54,6 +54,7 @@ def build_preprocessor(x: pd.DataFrame) -> ColumnTransformer:
         "is_coastal",
         "high_dew",
         "pitch_freshness",
+        "soil_composition",
     ]
     numeric_features = [column for column in x.columns if column not in categorical_features]
 

@@ -158,6 +158,24 @@ def _extract_match_row(match: dict[str, Any]) -> dict[str, Any] | None:
         pace_pct += rng.uniform(3, 10)
         spin_pct = 100 - pace_pct
 
+    soil_comp = rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.3, 0.4, 0.3])
+    if city in SPIN_CITIES:
+        soil_comp = rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.6, 0.1, 0.3])
+    elif city in COASTAL_CITIES:
+        soil_comp = rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.1, 0.7, 0.2])
+
+    grass_cov = rng.uniform(1.0, 12.0)
+    if city in SPIN_CITIES:
+        grass_cov = rng.uniform(0.5, 4.0)
+    elif city in COASTAL_CITIES:
+        grass_cov = rng.uniform(5.0, 14.0)
+
+    compaction = rng.uniform(180.0, 420.0)
+    if city in BATTER_CITIES:
+        compaction = rng.uniform(300.0, 450.0)
+    elif city in SPIN_CITIES:
+        compaction = rng.uniform(120.0, 260.0)
+
     return {
         "venue": venue,
         "city": city,
@@ -174,6 +192,10 @@ def _extract_match_row(match: dict[str, Any]) -> dict[str, Any] | None:
         "ground_spin_wickets_pct": spin_pct,
         "season": rng.choice(["Winter", "Summer", "Monsoon", "Post-Monsoon"]),
         "day_night": rng.choice([0, 1]),
+        "soil_composition": soil_comp,
+        "pitch_strip_number": rng.randint(1, 10),
+        "grass_coverage": grass_cov,
+        "compaction_kpa": compaction,
         "observed_wickets": total_wickets,
     }
 
@@ -224,6 +246,24 @@ def _extract_csv_match_row(csv_text: str) -> dict[str, Any] | None:
         pace_pct += rng.uniform(3, 10)
         spin_pct = 100 - pace_pct
 
+    soil_comp = rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.3, 0.4, 0.3])
+    if city in SPIN_CITIES:
+        soil_comp = rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.6, 0.1, 0.3])
+    elif city in COASTAL_CITIES:
+        soil_comp = rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.1, 0.7, 0.2])
+
+    grass_cov = rng.uniform(1.0, 12.0)
+    if city in SPIN_CITIES:
+        grass_cov = rng.uniform(0.5, 4.0)
+    elif city in COASTAL_CITIES:
+        grass_cov = rng.uniform(5.0, 14.0)
+
+    compaction = rng.uniform(180.0, 420.0)
+    if city in BATTER_CITIES:
+        compaction = rng.uniform(300.0, 450.0)
+    elif city in SPIN_CITIES:
+        compaction = rng.uniform(120.0, 260.0)
+
     return {
         "venue": venue,
         "city": city,
@@ -240,6 +280,10 @@ def _extract_csv_match_row(csv_text: str) -> dict[str, Any] | None:
         "ground_spin_wickets_pct": spin_pct,
         "season": rng.choice(["Winter", "Summer", "Monsoon", "Post-Monsoon"]),
         "day_night": rng.choice([0, 1]),
+        "soil_composition": soil_comp,
+        "pitch_strip_number": rng.randint(1, 10),
+        "grass_coverage": grass_cov,
+        "compaction_kpa": compaction,
         "observed_wickets": total_wickets,
     }
 
@@ -311,6 +355,26 @@ def assign_pitch_labels(df: pd.DataFrame) -> pd.DataFrame:
         if row.pitch_age_days > 4:
             spin_score += 1
 
+        # Physical pitch features impact
+        soil = getattr(row, "soil_composition", "Mixed Soil")
+        if soil == "Red Soil":
+            spin_score += 2
+        elif soil == "Black Soil":
+            pace_score += 1
+            batting_score += 1
+
+        grass = getattr(row, "grass_coverage", 4.5)
+        if grass > 8.0:
+            pace_score += 2
+        elif grass < 3.0:
+            batting_score += 1
+
+        compaction = getattr(row, "compaction_kpa", 280.0)
+        if compaction > 320.0:
+            batting_score += 2
+        elif compaction < 200.0:
+            spin_score += 2
+
         labels.append(int(np.argmax([batting_score, pace_score, spin_score])))
 
     labelled["pitch_type"] = labels
@@ -359,6 +423,24 @@ def generate_synthetic_dataset(n_samples: int = 1800) -> pd.DataFrame:
         pace_pct = float(np.clip(pace_pct, 28, 72))
         spin_pct = 100 - pace_pct
 
+        # Physical features generation logic
+        if is_spin_city:
+            soil_comp = str(rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.6, 0.1, 0.3]))
+            grass_cov = rng.normal(2.5, 1.2)
+            compaction = rng.normal(240, 50) - (15 * pitch_age)
+        elif is_coastal or is_batter_city:
+            soil_comp = str(rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.1, 0.7, 0.2]))
+            grass_cov = rng.normal(6.5, 2.5) if is_coastal else rng.normal(4.5, 1.5)
+            compaction = rng.normal(360, 45) - (10 * pitch_age)
+        else:
+            soil_comp = str(rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.3, 0.3, 0.4]))
+            grass_cov = rng.normal(4.0, 1.8)
+            compaction = rng.normal(300, 40) - (12 * pitch_age)
+
+        strip_num = int(rng.integers(1, 11))
+        grass_cov = float(np.clip(grass_cov, 0.0, 15.0))
+        compaction = float(np.clip(compaction, 100.0, 500.0))
+
         rows.append(
             {
                 "venue": venue,
@@ -376,6 +458,10 @@ def generate_synthetic_dataset(n_samples: int = 1800) -> pd.DataFrame:
                 "ground_spin_wickets_pct": spin_pct,
                 "season": str(rng.choice(["Winter", "Summer", "Monsoon", "Post-Monsoon"])),
                 "day_night": int(rng.choice([0, 1], p=[0.36, 0.64])),
+                "soil_composition": soil_comp,
+                "pitch_strip_number": strip_num,
+                "grass_coverage": grass_cov,
+                "compaction_kpa": compaction,
             }
         )
 
@@ -387,6 +473,16 @@ def build_dataset(output_path: Path = DATASET_PATH, n_samples: int = 1800) -> pd
     synthetic = generate_synthetic_dataset(n_samples=n_samples)
     raw_rows = load_raw_cricsheet_rows()
     if not raw_rows.empty:
+        # Fill missing physical pitch columns if they are not present
+        if "soil_composition" not in raw_rows.columns:
+            raw_rows["soil_composition"] = "Mixed Soil"
+        if "pitch_strip_number" not in raw_rows.columns:
+            raw_rows["pitch_strip_number"] = 4
+        if "grass_coverage" not in raw_rows.columns:
+            raw_rows["grass_coverage"] = 4.5
+        if "compaction_kpa" not in raw_rows.columns:
+            raw_rows["compaction_kpa"] = 280.0
+        
         raw_rows = assign_pitch_labels(raw_rows.drop(columns=["observed_wickets"], errors="ignore"))
         dataset = pd.concat([synthetic, raw_rows], ignore_index=True)
     else:
