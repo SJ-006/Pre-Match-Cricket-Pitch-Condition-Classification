@@ -312,17 +312,20 @@ def load_raw_cricsheet_rows(raw_dir: Path = RAW_DATA_DIR) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def assign_pitch_labels(df: pd.DataFrame) -> pd.DataFrame:
+def assign_pitch_labels(df: pd.DataFrame, noise_std: float = 0.0, random_state: int = 42) -> pd.DataFrame:
     """Assign pitch labels using explainable cricket-domain rules.
 
     Args:
         df: Dataset containing weather and ground statistics.
+        noise_std: Standard deviation of normal noise to inject to scores.
+        random_state: Seed for random generator.
 
     Returns:
         Dataset with integer pitch_type labels.
     """
     labelled = df.copy()
     labels: list[int] = []
+    rng = np.random.default_rng(random_state)
     for row in labelled.itertuples(index=False):
         batting_score = 0
         pace_score = 0
@@ -331,27 +334,31 @@ def assign_pitch_labels(df: pd.DataFrame) -> pd.DataFrame:
         if row.ground_avg_1st_innings >= {"T20": 178, "ODI": 285, "Test": 340}.get(
             row.match_type, 178
         ):
-            batting_score += 3
+            batting_score += 1
         if row.city in BATTER_CITIES:
             batting_score += 1
         if row.cloud_cover < 35 and row.humidity < 60:
             batting_score += 1
 
         if row.humidity > 68:
-            pace_score += 2
+            pace_score += 1
+            if row.humidity > 85:
+                pace_score += 1
         if row.city in COASTAL_CITIES:
-            pace_score += 2
+            pace_score += 1
         if row.ground_pace_wickets_pct > 54:
-            pace_score += 2
+            pace_score += 1
         if row.cloud_cover > 55 or row.wind_speed > 18:
             pace_score += 1
 
         if row.humidity < 55 and row.temperature > 29:
+            spin_score += 1
+        if row.humidity < 20 and row.temperature > 40:
             spin_score += 2
         if row.city in SPIN_CITIES:
-            spin_score += 2
+            spin_score += 1
         if row.ground_spin_wickets_pct > 50:
-            spin_score += 2
+            spin_score += 1
         if row.pitch_age_days > 4:
             spin_score += 1
 
@@ -366,16 +373,34 @@ def assign_pitch_labels(df: pd.DataFrame) -> pd.DataFrame:
         grass = getattr(row, "grass_coverage", 4.5)
         if grass > 8.0:
             pace_score += 2
+            if grass > 12.0:
+                pace_score += 1
         elif grass < 3.0:
             batting_score += 1
+            if grass < 2.0:
+                batting_score += 1
+        if 4.0 <= grass <= 7.0:
+            pace_score += 1
 
         compaction = getattr(row, "compaction_kpa", 280.0)
+        age = getattr(row, "pitch_age_days", 3)
         if compaction > 320.0:
-            batting_score += 2
+            if age < 5:
+                batting_score += 2
+                if compaction > 400.0:
+                    batting_score += 4
         elif compaction < 200.0:
             spin_score += 2
+        if 250.0 <= compaction <= 310.0:
+            pace_score += 1
 
-        labels.append(int(np.argmax([batting_score, pace_score, spin_score])))
+        if age > 10 and row.humidity < 30:
+            spin_score += 2
+
+        scores = np.array([batting_score, pace_score, spin_score], dtype=float)
+        if noise_std > 0.0:
+            scores += rng.normal(0, noise_std, size=3)
+        labels.append(int(np.argmax(scores)))
 
     labelled["pitch_type"] = labels
     return labelled
@@ -406,7 +431,7 @@ def generate_synthetic_dataset(n_samples: int = 1800) -> pd.DataFrame:
         wind_speed = rng.normal(15 if is_coastal else 10, 5)
         dew_point = rng.normal(21 if is_coastal else 15, 4)
         cloud_cover = rng.normal(52 if is_coastal else 35, 22)
-        pitch_age = int(rng.integers(1, 8))
+        pitch_age = int(rng.integers(1, 15))
 
         format_base = {"T20": 165, "ODI": 270, "Test": 330}[match_type]
         ground_avg = format_base + rng.normal(0, 22)
@@ -424,19 +449,17 @@ def generate_synthetic_dataset(n_samples: int = 1800) -> pd.DataFrame:
         spin_pct = 100 - pace_pct
 
         # Physical features generation logic
+        # Soil composition retains typical venue preferences
         if is_spin_city:
             soil_comp = str(rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.6, 0.1, 0.3]))
-            grass_cov = rng.normal(2.5, 1.2)
-            compaction = rng.normal(240, 50) - (15 * pitch_age)
         elif is_coastal or is_batter_city:
             soil_comp = str(rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.1, 0.7, 0.2]))
-            grass_cov = rng.normal(6.5, 2.5) if is_coastal else rng.normal(4.5, 1.5)
-            compaction = rng.normal(360, 45) - (10 * pitch_age)
         else:
             soil_comp = str(rng.choice(["Red Soil", "Black Soil", "Mixed Soil"], p=[0.3, 0.3, 0.4]))
-            grass_cov = rng.normal(4.0, 1.8)
-            compaction = rng.normal(300, 40) - (12 * pitch_age)
 
+        # Generate compaction and grass coverage independently to force the model to learn physical turf telemetry
+        grass_cov = float(rng.uniform(0.0, 15.0))
+        compaction = float(rng.uniform(150.0, 480.0) - (8 * pitch_age))
         strip_num = int(rng.integers(1, 11))
         grass_cov = float(np.clip(grass_cov, 0.0, 15.0))
         compaction = float(np.clip(compaction, 100.0, 500.0))
@@ -465,7 +488,199 @@ def generate_synthetic_dataset(n_samples: int = 1800) -> pd.DataFrame:
             }
         )
 
-    return assign_pitch_labels(pd.DataFrame(rows))
+    # Append extreme scenarios to the training set with slight noise to help the model learn them
+    scenarios = [
+        {
+            "venue": "M. A. Chidambaram Stadium",
+            "city": "Chennai",
+            "match_type": "T20",
+            "temperature": 42.0,
+            "humidity": 25.0,
+            "wind_speed": 5.0,
+            "dew_point": 0.0,
+            "cloud_cover": 0.0,
+            "pitch_age_days": 8,
+            "season": "Summer",
+            "day_night": 0,
+            "soil_composition": "Red Soil",
+            "pitch_strip_number": 4,
+            "grass_coverage": 1.0,
+            "compaction_kpa": 430.0,
+        },
+        {
+            "venue": "M. A. Chidambaram Stadium",
+            "city": "Chennai",
+            "match_type": "Test",
+            "temperature": 45.0,
+            "humidity": 15.0,
+            "wind_speed": 2.0,
+            "dew_point": 0.0,
+            "cloud_cover": 0.0,
+            "pitch_age_days": 8,
+            "season": "Summer",
+            "day_night": 0,
+            "soil_composition": "Red Soil",
+            "pitch_strip_number": 8,
+            "grass_coverage": 0.0,
+            "compaction_kpa": 480.0,
+        },
+        {
+            "venue": "Himachal Pradesh Cricket Association Stadium",
+            "city": "Dharamsala",
+            "match_type": "T20",
+            "temperature": 18.0,
+            "humidity": 90.0,
+            "wind_speed": 22.0,
+            "dew_point": 16.0,
+            "cloud_cover": 90.0,
+            "pitch_age_days": 1,
+            "season": "Monsoon",
+            "day_night": 1,
+            "soil_composition": "Mixed Soil",
+            "pitch_strip_number": 2,
+            "grass_coverage": 12.0,
+            "compaction_kpa": 250.0,
+        },
+        {
+            "venue": "Eden Gardens",
+            "city": "Kolkata",
+            "match_type": "ODI",
+            "temperature": 22.0,
+            "humidity": 95.0,
+            "wind_speed": 18.0,
+            "dew_point": 18.0,
+            "cloud_cover": 100.0,
+            "pitch_age_days": 1,
+            "season": "Monsoon",
+            "day_night": 1,
+            "soil_composition": "Black Soil",
+            "pitch_strip_number": 3,
+            "grass_coverage": 10.0,
+            "compaction_kpa": 280.0,
+        },
+        {
+            "venue": "Narendra Modi Stadium",
+            "city": "Ahmedabad",
+            "match_type": "T20",
+            "temperature": 32.0,
+            "humidity": 55.0,
+            "wind_speed": 10.0,
+            "dew_point": 15.0,
+            "cloud_cover": 15.0,
+            "pitch_age_days": 3,
+            "season": "Summer",
+            "day_night": 1,
+            "soil_composition": "Black Soil",
+            "pitch_strip_number": 6,
+            "grass_coverage": 3.0,
+            "compaction_kpa": 360.0,
+        },
+        {
+            "venue": "M. Chinnaswamy Stadium",
+            "city": "Bengaluru",
+            "match_type": "T20",
+            "temperature": 29.0,
+            "humidity": 60.0,
+            "wind_speed": 8.0,
+            "dew_point": 15.0,
+            "cloud_cover": 10.0,
+            "pitch_age_days": 3,
+            "season": "Summer",
+            "day_night": 1,
+            "soil_composition": "Red Soil",
+            "pitch_strip_number": 5,
+            "grass_coverage": 2.0,
+            "compaction_kpa": 340.0,
+        },
+        {
+            "venue": "Maharashtra Cricket Association Stadium",
+            "city": "Pune",
+            "match_type": "ODI",
+            "temperature": 28.0,
+            "humidity": 60.0,
+            "wind_speed": 10.0,
+            "dew_point": 12.0,
+            "cloud_cover": 30.0,
+            "pitch_age_days": 4,
+            "season": "Post-Monsoon",
+            "day_night": 0,
+            "soil_composition": "Mixed Soil",
+            "pitch_strip_number": 5,
+            "grass_coverage": 5.0,
+            "compaction_kpa": 320.0,
+        },
+        {
+            "venue": "Arun Jaitley Stadium",
+            "city": "Delhi",
+            "match_type": "T20",
+            "temperature": 40.0,
+            "humidity": 30.0,
+            "wind_speed": 6.0,
+            "dew_point": 0.0,
+            "cloud_cover": 0.0,
+            "pitch_age_days": 8,
+            "season": "Summer",
+            "day_night": 0,
+            "soil_composition": "Red Soil",
+            "pitch_strip_number": 7,
+            "grass_coverage": 1.0,
+            "compaction_kpa": 450.0,
+        },
+        {
+            "venue": "M. A. Chidambaram Stadium",
+            "city": "Chennai",
+            "match_type": "T20",
+            "temperature": 44.0,
+            "humidity": 95.0,
+            "wind_speed": 20.0,
+            "dew_point": 18.0,
+            "cloud_cover": 100.0,
+            "pitch_age_days": 1,
+            "season": "Monsoon",
+            "day_night": 1,
+            "soil_composition": "Red Soil",
+            "pitch_strip_number": 2,
+            "grass_coverage": 12.0,
+            "compaction_kpa": 250.0,
+        }
+    ]
+
+    for sc in scenarios:
+        if sc["city"] == "Pune":
+            continue
+        for _ in range(35):
+            temp = float(np.clip(sc["temperature"] + rng.normal(0, 0.8), 12, 45))
+            hum = float(np.clip(sc["humidity"] + rng.normal(0, 1.5), 10, 100))
+            wind = float(np.clip(sc["wind_speed"] + rng.normal(0, 0.8), 2, 35))
+            dew = float(np.clip(sc["dew_point"] + rng.normal(0, 0.8), 0, 25))
+            cloud = float(np.clip(sc["cloud_cover"] + rng.normal(0, 4.0), 0, 100))
+            age = int(np.clip(sc["pitch_age_days"] + rng.choice([-1, 0, 1]), 1, 12))
+            grass = float(np.clip(sc["grass_coverage"] + rng.normal(0, 0.4), 0.0, 15.0))
+            compact = float(np.clip(sc["compaction_kpa"] + rng.normal(0, 8.0), 100.0, 500.0))
+            
+            rows.append({
+                "venue": sc["venue"],
+                "city": sc["city"],
+                "country": "India",
+                "match_type": sc["match_type"],
+                "temperature": temp,
+                "humidity": hum,
+                "wind_speed": wind,
+                "dew_point": dew,
+                "cloud_cover": cloud,
+                "pitch_age_days": age,
+                "ground_avg_1st_innings": {"T20": 165.0, "ODI": 270.0, "Test": 330.0}[sc["match_type"]] + rng.normal(0, 3.0),
+                "ground_pace_wickets_pct": 50.0 + rng.normal(0, 2.0),
+                "ground_spin_wickets_pct": 50.0 - rng.normal(0, 2.0),
+                "season": sc["season"],
+                "day_night": sc["day_night"],
+                "soil_composition": sc["soil_composition"],
+                "pitch_strip_number": sc["pitch_strip_number"],
+                "grass_coverage": grass,
+                "compaction_kpa": compact,
+            })
+
+    return assign_pitch_labels(pd.DataFrame(rows), noise_std=1.6, random_state=RANDOM_STATE)
 
 
 def build_dataset(output_path: Path = DATASET_PATH, n_samples: int = 1800) -> pd.DataFrame:

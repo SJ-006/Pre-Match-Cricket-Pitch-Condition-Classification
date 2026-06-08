@@ -79,7 +79,7 @@ def build_preprocessor(x: pd.DataFrame) -> ColumnTransformer:
     )
 
 
-def preprocess_dataset(dataset_path: str | None = None) -> PreprocessedData:
+def preprocess_dataset(dataset_path: str | None = None, fit_preprocessor: bool = True) -> PreprocessedData:
     """Load, feature-engineer, split, fit preprocessing, and persist transformer."""
     path = DATASET_PATH if dataset_path is None else dataset_path
     df = pd.read_csv(path)
@@ -102,12 +102,16 @@ def preprocess_dataset(dataset_path: str | None = None) -> PreprocessedData:
         stratify=y_temp,
     )
 
-    preprocessor = build_preprocessor(x_train)
-    preprocessor.fit(x_train)
-    PREPROCESSOR_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(preprocessor, PREPROCESSOR_PATH)
+    if fit_preprocessor:
+        preprocessor = build_preprocessor(x_train)
+        preprocessor.fit(x_train)
+        PREPROCESSOR_PATH.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(preprocessor, PREPROCESSOR_PATH)
+        logger.info("Saved new preprocessor to %s.", PREPROCESSOR_PATH)
+    else:
+        preprocessor = joblib.load(PREPROCESSOR_PATH)
+
     feature_names = list(preprocessor.get_feature_names_out())
-    logger.info("Saved preprocessor to %s.", PREPROCESSOR_PATH)
     return PreprocessedData(x_train, x_val, x_test, y_train, y_val, y_test, preprocessor, feature_names)
 
 

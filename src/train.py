@@ -8,7 +8,7 @@ import joblib
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import f1_score
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 
 from src.config import MODEL_PATH, RANDOM_STATE
 from src.preprocess import PreprocessedData, preprocess_dataset, transform_splits
@@ -21,19 +21,24 @@ def train_models(data: PreprocessedData | None = None) -> tuple[RandomForestClas
     data = preprocess_dataset() if data is None else data
     x_train, x_val, _ = transform_splits(data)
 
-    rf = RandomForestClassifier(random_state=RANDOM_STATE, class_weight="balanced")
-    param_grid = {
-        "n_estimators": [100, 200, 300],
-        "max_depth": [None, 10, 20],
-        "min_samples_split": [2, 5],
+    rf = RandomForestClassifier(random_state=RANDOM_STATE)
+    param_dist = {
+        "n_estimators": [150, 200, 250],
+        "max_depth": [6, 7, 8, 9],
+        "min_samples_split": [15, 20, 25],
+        "min_samples_leaf": [6, 8, 10],
+        "max_features": ["sqrt", 0.4, 0.5],
+        "class_weight": ["balanced", None]
     }
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
-    search = GridSearchCV(
+    search = RandomizedSearchCV(
         rf,
-        param_grid=param_grid,
+        param_distributions=param_dist,
+        n_iter=50,
         scoring="f1_macro",
         cv=cv,
-        n_jobs=1,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
     )
     search.fit(x_train, data.y_train)
     best_rf = search.best_estimator_
